@@ -20,16 +20,50 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-
-write_section_header(){
-  echo "<h2 class='s$1 clickable' onclick='activeSection(\"$2\")' >" >> $3
-  echo "$2" | tr a-z A-Z  >> $3
-  echo "</h2>" >> $3
+generate_thumbnails() {
+  echo "generate thumbnails ..."
+  mkdir -p thumbnails
+  rm -rf thumbnails/*
+  
+  # Count total number of images
+  total_images=$(find ./wallpapers -type f | wc -l)
+  current_image=0
+  
+  for section_dir in ./wallpapers/*; do
+    section_name="${section_dir##*/}"
+    mkdir -p "thumbnails/$section_name"
+    
+    for img in "$section_dir"/*; do
+      current_image=$((current_image + 1))
+      local img_filename="${img##*/}"
+      local thumbnail="thumbnails/$section_name/$img_filename"
+      echo "($current_image/$total_images): $img -> $thumbnail"
+      convert "$img" -resize 300x300 "$thumbnail"
+    done
+  done
+  
+  echo "Thumbnail generation complete: $total_images images processed"
 }
 
-write_img(){
-  echo "  <a target='_blank' href='$1'>
-<img loading='lazy' src='$1' alt='$1' width='200'></a>" >> $2
+write_section_header() {
+  echo "write section header ..."
+  echo "<h2 class='s$1 clickable' onclick='activeSection(\"$2\")' >" >>$3
+  echo "$2" | tr a-z A-Z >>$3
+  echo "</h2>" >>$3
+}
+
+write_img() {
+  echo "write image ..."
+  # Remove leading './' from path if present
+  local img_path="${1#./}"
+  local section_name=$(echo "$img_path" | cut -d'/' -f2)
+  local img_filename="${1##*/}"
+  
+  # Use web-friendly paths (no leading ./)
+  local thumbnail_path="thumbnails/$section_name/$img_filename"
+  
+  echo "  <a target='_blank' href='$img_path'>
+<img loading='lazy' src='$thumbnail_path' alt='$img_filename' width='200'></a>" >>$2
 }
 
 rm *.html
@@ -38,7 +72,6 @@ touch ./index.html
 
 echo "<!DOCTYPE html>
 <html lang='en'>
-
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
@@ -47,7 +80,6 @@ echo "<!DOCTYPE html>
   <script src='app.js' defer></script>
   <script src='https://kit.fontawesome.com/13865d7982.js' crossorigin='anonymous' defer></script>
 </head>
-
 <body>
   <div class='float-btns'>
     <a href='https://github.com/AngelJumbo/gruvbox-wallpapers' target='_blank' class='btn float-btn' title='Source code' >
@@ -63,71 +95,67 @@ echo "<!DOCTYPE html>
     </button>
   </div>
   <main>
-  <h1>Gruvbox Wallpapers</h1>" > ./index.html
+  <h1>Gruvbox Wallpapers</h1>" >./index.html
 
 color=1
 
-maxPerPage=8 
+maxPerPage=8
 
 declare -a sections
 
-for subdir in ./wallpapers/*
-do
+generate_thumbnails
+
+for subdir in ./wallpapers/*; do
   section="${subdir##*/}"
   sections+=("$section")
   write_section_header $color "$section" ./index.html
-
 
   page=1
   img_count=0
   subhtml="${section}_page${page}.html"
   touch ./$subhtml
 
-  echo "<div class='section' id='$section'>" >> ./index.html
+  echo "<div class='section' id='$section'>" >>./index.html
 
-  echo "<div class='pager'>" >> ./index.html
+  echo "<div class='pager'>" >>./index.html
   countImgs=$(find "$subdir" -type f | wc -l)
   countImgs=$((countImgs - 1))
-  for i in $(seq 1 $((( $countImgs / $maxPerPage)+1))); do
-    echo "<button class='btn pager-btn' onclick='loadPage(\"$section\", $i)'>$i</button>" >> ./index.html
+  for i in $(seq 1 $((($countImgs / $maxPerPage) + 1))); do
+    echo "<button class='btn pager-btn' onclick='loadPage(\"$section\", $i)'>$i</button>" >>./index.html
   done
-  echo "</div>" >> ./index.html
-  echo "<div  id='$section-content'>" >> ./index.html
-  echo "<div class='c'>" >> ./$subhtml
-  for wallpaper in ${subdir}/*
-  do
+  echo "</div>" >>./index.html
+  echo "<div id='$section-content'>" >>./index.html
+  echo "<div class='c'>" >>./$subhtml
+  for wallpaper in ${subdir}/*; do
     if [ "$img_count" -ge $maxPerPage ]; then
-
-      echo "</div>" >> ./$subhtml
+      echo "</div>" >>./$subhtml
       page=$((page + 1))
       subhtml="${section}_page${page}.html"
       touch ./$subhtml
 
-
-      echo "<div class='c'>" >> ./$subhtml
+      echo "<div class='c'>" >>./$subhtml
       img_count=0
     fi
 
-    write_img $wallpaper ./$subhtml
+    write_img "$wallpaper" "./$subhtml"
     img_count=$((img_count + 1))
   done
 
-  echo "</div>" >> ./$subhtml
+  echo "</div>" >>./$subhtml
 
-  echo "</div>" >> ./index.html
-  echo "</div>" >> ./index.html
+  echo "</div>" >>./index.html
+  echo "</div>" >>./index.html
 
   color=$((color + 1))
-  if [ "$color" -eq 8 ]; then 
+  if [ "$color" -eq 8 ]; then
     color=1
   fi
 done
-echo "</main>" >> ./index.html
+echo "</main>" >>./index.html
 echo "<script>
-  window.onload = () => {" >> ./index.html
-#echo "hideAll();" >> ./index.html
+  window.onload = () => {" >>./index.html
 for section in "${sections[@]}"; do
-  echo "    loadPage('$section', 1);" >> ./index.html
+  echo "    loadPage('$section', 1);" >>./index.html
 done
 
 echo "
@@ -138,9 +166,7 @@ echo "
     setTheme('light');
   }
 }
-</script>" >> ./index.html
+</script>" >>./index.html
 
-
-echo "
-</body>
-</html>" >> ./index.html
+echo "</body>
+</html>" >>./index.html
